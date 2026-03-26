@@ -1,0 +1,32 @@
+name: Incruit Alert Bot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # 30분마다 자동 실행
+  workflow_dispatch: # 수동 실행 버튼
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Bot
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python incruit_bot.py
+      - name: Update DB
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          git add processed_incruit_ids.txt || exit 0
+          git commit -m "Update Incruit DB" || exit 0
+          git push
