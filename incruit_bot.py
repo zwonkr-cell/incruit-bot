@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import os
+import re
+import html
 import time
 
 # 1. 설정
@@ -63,13 +65,18 @@ def get_jobs():
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    data = {
-        "chat_id": TG_CHAT_ID, 
-        "text": msg, 
-        "parse_mode": "HTML", 
-        "disable_web_page_preview": True 
-    }
-    requests.post(url, data=data, timeout=10)
+    # TG_CHAT_ID 에 콤마/공백으로 여러 명을 넣을 수 있습니다. (예: "8755814064,8467039744")
+    chat_ids = [c for c in re.split(r"[,\s]+", TG_CHAT_ID or "") if c]
+    for cid in chat_ids:
+        data = {
+            "chat_id": cid,
+            "text": msg,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        res = requests.post(url, data=data, timeout=10)
+        if res.status_code != 200:
+            print(f"전송 실패 (chat_id={cid}): {res.text}")
 
 if __name__ == "__main__":
     jobs = get_jobs()
@@ -79,13 +86,20 @@ if __name__ == "__main__":
     new_id_list = []
     for job in reversed(jobs):
         if job['id'] not in processed_ids:
+            # 공고명/회사명에 <, >, & 가 있어도 메시지가 깨지지 않도록 이스케이프
+            c = html.escape(job['company'])
+            t = html.escape(job['title'])
+            loc = html.escape(job['location'])
+            lk = html.escape(job['link'])
+            dl = html.escape(job['deadline'])
+            rt = html.escape(job['reg_time'])
             # 재원님이 요청하신 새로운 메시지 양식 적용
             message = (
-                f"<b>{job['company']} - {job['title']}</b>\n\n"
-                f"• {job['company']}({job['location']})\n"
-                f"• <a href='{job['link']}'><b>{job['title']}</b></a>\n"
-                f"• {job['deadline']}\n\n"
-                f"본 공고는 {job['reg_time']}됐어요"
+                f"<b>{c} - {t}</b>\n\n"
+                f"• {c}({loc})\n"
+                f"• <a href='{lk}'><b>{t}</b></a>\n"
+                f"• {dl}\n\n"
+                f"본 공고는 {rt}됐어요"
             )
             send_telegram(message)
             new_id_list.append(job['id'])
