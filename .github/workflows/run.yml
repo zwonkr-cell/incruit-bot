@@ -11,9 +11,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Install dependencies
@@ -24,9 +24,10 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python incruit_bot.py
       - name: Update DB
+        if: always()   # 오류로 봇이 중단돼도 상태(하트비트/오류 타임스탬프)는 저장
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git add processed_incruit_ids.txt || exit 0
-          git commit -m "Update Incruit DB" || exit 0
+          git add processed_incruit_ids.txt bot_state.json
+          git commit -m "Update state" || exit 0
           git push
