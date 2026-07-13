@@ -153,8 +153,63 @@ def maybe_heartbeat(state, collected, new_count):
                    f"수집완료 {collected}건, 신규후보 {new_count}건\n(확인 시각: {_now_iso()})")
         state["last_activity_at"] = _now_iso()
 
+# ── 일일 리포트: 매일 18시(KST) 이후 첫 실행 시 전일18~당일18 신규 공고 요약 ──
+REPORT_HOUR = 18
+SENT_LOG_KEEP_HOURS = 48
+
+def record_sent(state, company):
+    state.setdefault("sent_log", []).append({"company": (company or "(기업명 없음)"), "at": _now_iso()})
+
+def prune_sent_log(state, keep_hours=SENT_LOG_KEEP_HOURS):
+    now = datetime.now(KST)
+    kept = []
+    for e in state.get("sent_log", []):
+        t = _parse_iso(e.get("at"))
+        if t and (now - t) <= timedelta(hours=keep_hours):
+            kept.append(e)
+    state["sent_log"] = kept
+
+def maybe_daily_report(state, now=None):
+    now = now or datetime.now(KST)
+    today_1800 = now.replace(hour=REPORT_HOUR, minute=0, second=0, microsecond=0)
+    today_str = now.strftime("%Y-%m-%d")
+    # 최초 실행: 이미 18시 지났으면 오늘 리포트는 데이터 없어 건너뜀(다음날부터)
+    if not state.get("report_initialized"):
+        state["report_initialized"] = True
+        if now >= today_1800:
+            state["last_report_date"] = today_str
+        return
+    if now < today_1800 or state.get("last_report_date") == today_str:
+        return
+    win_start = today_1800 - timedelta(days=1)
+    companies = []
+    n = 0
+    for e in state.get("sent_log", []):
+        t = _parse_iso(e.get("at"))
+        if t and win_start <= t < today_1800:
+            n += 1
+            c = e.get("company") or "(기업명 없음)"
+            if c not in companies:
+                companies.append(c)
+    header = (f"📊 [{BOT_NAME}] 일일 리포트\n"
+              f"({win_start.strftime('%m/%d %H:%M')} ~ {today_1800.strftime('%m/%d %H:%M')})")
+    if n:
+        body = (f"\n신규 공고 {n}건 · 기업 {len(companies)}곳\n\n"
+                + "\n".join(f"• {c}" for c in companies))
+    else:
+        body = "\n이 기간에 새로 올라온 공고가 없었어요."
+    send_plain(header + body)
+    state["last_report_date"] = today_str
+    state["last_activity_at"] = _now_iso()   # 리포트도 활동 → 하트비트 리셋
+
 if __name__ == "__main__":
     state = load_state()
+    # 일일 리포트(매일 18시 이후 첫 실행) — 수집 실패와 무관하게 먼저 처리
+    try:
+        maybe_daily_report(state)
+    except Exception as e:
+        print("일일 리포트 처리 실패:", e)
+    prune_sent_log(state)
     try:
         jobs = get_jobs()
         db_file = "processed_incruit_ids.txt"
@@ -182,6 +237,7 @@ if __name__ == "__main__":
                 send_telegram(message)
                 new_id_list.append(job['id'])
                 new_count += 1
+                record_sent(state, job['company'])   # 일일 리포트용 기록
                 time.sleep(1.2)
 
         with open(db_file, "w") as f:
