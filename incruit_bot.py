@@ -20,69 +20,132 @@ HEADERS = {
     'Referer': 'https://job.incruit.com/',
 }
 
-def get_jobs():
-    saw_empty_200 = False
-    for attempt in range(5):
+# ── 차단/접속불가 시 즉시 한국 프록시로 우회 (캐치봇과 동일 방식) ──
+PROXY_SOURCES = [
+    "https://proxylist.geonode.com/api/proxy-list?country=KR&protocols=http%2Chttps&limit=100&page=1&sort_by=lastChecked&sort_type=desc",
+    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=kr",
+]
+MAX_PROXY_TRIES = 40
+PROXY_TIMEOUT = 10
+
+def get_kr_proxy_candidates():
+    cands = []
+    for u in PROXY_SOURCES:
         try:
-            print(f"{attempt + 1}번째 인크루트 접속 시도...")
+            r = requests.get(u, timeout=15)
+            if "geonode" in u:
+                for p in r.json().get("data", []):
+                    cands.append(f"{p['ip']}:{p['port']}")
+            else:
+                cands += [ln.strip() for ln in r.text.splitlines() if ":" in ln]
+        except Exception as e:
+            print("프록시 목록 수집 실패:", e)
+    return list(dict.fromkeys(cands))
+
+def _parse_jobs(html_text):
+    soup = BeautifulSoup(html_text, 'html.parser')
+    job_list = []
+    for item in soup.select('ul.c_row'):
+        try:
+            job_id = item.get('jobno')
+            company = item.select_one('.cpname').get_text(strip=True)
+
+            # 지역 정보 추출 (cl_md 클래스 내부의 첫 번째 span)
+            location_tag = item.select_one('.cl_md span')
+            location = location_tag.get_text(strip=True) if location_tag else "지역미정"
+
+            title_tag = item.select_one('.cell_mid .cl_top a')
+            title = title_tag.get_text(strip=True)
+            link = title_tag['href']
+            if not link.startswith('http'):
+                link = "https:" + link
+
+            info_spans = item.select('.cell_last .cl_btm span')
+            deadline = info_spans[0].get_text(strip=True) if len(info_spans) > 0 else "마감정보 없음"
+            reg_time = info_spans[1].get_text(strip=True) if len(info_spans) > 1 else ""
+            # 괄호 제거 (예: (8일전 등록) -> 8일전 등록)
+            reg_time = reg_time.replace('(', '').replace(')', '')
+
+            job_list.append({
+                'id': job_id,
+                'company': company,
+                'location': location,
+                'title': title,
+                'link': link,
+                'deadline': deadline,
+                'reg_time': reg_time
+            })
+        except: continue
+    return job_list
+
+def get_jobs(state=None):
+    """반환: (jobs, transport)  transport = 'direct' 또는 'proxy:IP'"""
+    saw_blocked = False
+    saw_empty_200 = False
+    # 1) 직접 연결 3회
+    for attempt in range(3):
+        try:
+            print(f"{attempt + 1}번째 인크루트 직접 접속 시도...")
             res = requests.get(TARGET_URL, headers=HEADERS, timeout=30)
             res.encoding = 'euc-kr'
-
             if res.status_code == 200:
-                soup = BeautifulSoup(res.text, 'html.parser')
-                items = soup.select('ul.c_row')
-                if not items:
-                    # 200 인데 목록 0건 = 리다이렉트/개편/차단 페이지 의심 → 재시도 후 구조오류로 보고
-                    saw_empty_200 = True
-                    print("응답은 200이지만 공고 목록 파싱 0건")
-                    time.sleep(10)
-                    continue
-                job_list = []
-                for item in items:
-                    try:
-                        job_id = item.get('jobno')
-                        company = item.select_one('.cpname').get_text(strip=True)
-
-                        # 지역 정보 추출 (cl_md 클래스 내부의 첫 번째 span)
-                        location_tag = item.select_one('.cl_md span')
-                        location = location_tag.get_text(strip=True) if location_tag else "지역미정"
-
-                        title_tag = item.select_one('.cell_mid .cl_top a')
-                        title = title_tag.get_text(strip=True)
-                        link = title_tag['href']
-                        if not link.startswith('http'):
-                            link = "https:" + link
-
-                        info_spans = item.select('.cell_last .cl_btm span')
-                        deadline = info_spans[0].get_text(strip=True) if len(info_spans) > 0 else "마감정보 없음"
-                        reg_time = info_spans[1].get_text(strip=True) if len(info_spans) > 1 else ""
-                        # 괄호 제거 (예: (8일전 등록) -> 8일전 등록)
-                        reg_time = reg_time.replace('(', '').replace(')', '')
-
-                        job_list.append({
-                            'id': job_id,
-                            'company': company,
-                            'location': location,
-                            'title': title,
-                            'link': link,
-                            'deadline': deadline,
-                            'reg_time': reg_time
-                        })
-                    except: continue
-                if not job_list:
-                    saw_empty_200 = True
-                    print("목록은 있으나 항목 파싱 전부 실패")
-                    time.sleep(10)
-                    continue
-                return job_list
+                jobs = _parse_jobs(res.text)
+                if jobs:
+                    return jobs, "direct"
+                saw_empty_200 = True
+                print("응답은 200이지만 공고 목록 파싱 0건")
+            elif res.status_code in (403, 429):
+                saw_blocked = True
+                print(f"HTTP {res.status_code} (차단 의심)")
             else:
                 print(f"HTTP {res.status_code}")
         except Exception as e:
             print(f"에러: {e}")
-        time.sleep(10)
+        time.sleep(8)
+    # 2) 직접 실패 → 즉시 한국 프록시 폴백
+    print("직접 연결 실패 → 한국 프록시 폴백 시도")
+    cands = get_kr_proxy_candidates()
+    lp = (state or {}).get("last_proxy")
+    if lp:
+        cands = [lp] + [c for c in cands if c != lp]   # 직전 성공 프록시 최우선
+    print(f"프록시 후보 {len(cands)}개" + (f" (직전 성공 {lp} 우선)" if lp else ""))
+    for p in cands[:MAX_PROXY_TRIES]:
+        prox = {"http": f"http://{p}", "https": f"http://{p}"}
+        try:
+            res = requests.get(TARGET_URL, headers=HEADERS, proxies=prox, timeout=PROXY_TIMEOUT)
+            res.encoding = 'euc-kr'
+            if res.status_code == 200:
+                jobs = _parse_jobs(res.text)
+                if jobs:
+                    print(f"프록시 우회 성공: {p}")
+                    return jobs, f"proxy:{p}"
+        except Exception:
+            continue
+    # 3) 프록시도 실패 → 원인별 예외 (오류 분류 노티로 이어짐)
     if saw_empty_200:
         raise RuntimeError("페이지 응답은 정상(200)이지만 공고를 읽지 못했습니다 - 사이트 구조 변경 의심")
-    raise RuntimeError("인크루트 접속 5회 모두 실패(사이트 접근 불가)")
+    if saw_blocked:
+        raise RuntimeError("접근 차단 의심(403 등)이며 프록시 우회도 실패 - 다음 실행에서 재시도")
+    raise RuntimeError("인크루트 접속 실패(직접+프록시 모두) - 사이트 접근 불가")
+
+def handle_transport(state, transport):
+    """프록시 우회 여부 변화를 감지해 노티. 우회 지속 중엔 12시간마다 1회 리마인드."""
+    prev = str(state.get("transport", "direct"))
+    now_p = transport.startswith("proxy")
+    prev_p = prev.startswith("proxy")
+    if now_p and not prev_p:
+        send_plain(f"🛡 [{BOT_NAME}] 직접 접속이 막혀서 한국 프록시로 즉시 우회했어요.\n"
+                   f"수집·알림은 정상 작동 중이고, 조치는 필요 없어요.\n"
+                   f"(우회가 계속되면 12시간마다 한 번씩만 알려드릴게요)")
+        state["proxy_notice_at"] = _now_iso()
+    elif now_p and prev_p:
+        last = _parse_iso(state.get("proxy_notice_at"))
+        if not last or (datetime.now(KST) - last) >= timedelta(hours=12):
+            send_plain(f"🛡 [{BOT_NAME}] 여전히 프록시 우회로 수집 중이에요(정상 작동, 조치 불필요).")
+            state["proxy_notice_at"] = _now_iso()
+    elif (not now_p) and prev_p:
+        send_plain(f"✅ [{BOT_NAME}] 직접 접속이 복구되어 프록시 우회를 종료했어요.")
+    state["transport"] = transport
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
@@ -154,12 +217,12 @@ ERROR_CATEGORIES = [
     ("blocked", "🟠", "중간 · 지켜보기", 1,
      ["403", "forbidden", "captcha", "차단"],
      "사이트가 접근을 차단했을 가능성",
-     "사이트가 자동 수집을 일시적으로 막았을 수 있어요.",
-     "당장 조치는 필요 없어요. 이 알림이 하루 이상 반복되면 개발 세션에 전달해 주세요."),
+     "사이트가 자동 수집을 일시적으로 막았을 수 있어요. 봇이 한국 프록시 우회까지 자동 시도했지만 이번엔 실패했어요.",
+     "당장 조치는 필요 없어요(다음 실행에서 다시 우회 시도). 이 알림이 하루 이상 반복되면 개발 세션에 전달해 주세요."),
     ("network", "🟡", "낮음 · 조치 불필요", 2,
-     ["접속 5회 모두 실패", "connection", "timeout", "timed out", "10054", "reset", "aborted", "urlerror"],
+     ["접속 실패", "접속 5회 모두 실패", "connection", "timeout", "timed out", "10054", "reset", "aborted", "urlerror"],
      "일시적 접속 장애",
-     "서버 혼잡이나 순간적인 네트워크 문제로 가끔 발생해요.",
+     "서버 혼잡이나 순간적인 네트워크 문제로 가끔 발생해요(프록시 우회도 함께 시도했어요).",
      "아니요. 다음 실행에서 자동 복구되고, 놓친 공고도 그대로 알림돼요."),
     ("state", "🟠", "중간 · 지켜보기", 1,
      ["oserror", "permissionerror", "json.decoder", "state 저장"],
@@ -195,6 +258,11 @@ def notify_error(state, raw_text):
         print(f"[{info['key']}] 같은 유형 최근 알림됨 → 생략(스팸 방지)")
         return
     consec_note = f" (연속 {cnt}회째)" if cnt >= 2 else ""
+    # 새로운(미분류) 유형은 판단 근거가 없으므로 오류 원문을 함께 첨부
+    if info["key"] == "unknown":
+        tail = f"■ 오류 원문 (처음 보는 유형이라 원문을 함께 보내요)\n{raw_text[:1500]}\n"
+    else:
+        tail = f"(참고: {summary})\n"
     msg = (f"{info['emoji']} [{BOT_NAME}] 오류 알림 — 심각도: {info['sev']}\n"
            f"\n"
            f"■ 무슨 오류인가요?\n{info['title']}{consec_note}\n"
@@ -203,7 +271,7 @@ def notify_error(state, raw_text):
            f"\n"
            f"■ 조치가 필요한가요?\n{info['action']}\n"
            f"\n"
-           f"(참고: {summary})\n"
+           f"{tail}"
            f"(발생 시각: {_now_iso()})")
     send_plain(msg)
     state.setdefault("err_notified_at", {})[info["key"]] = _now_iso()
@@ -277,7 +345,10 @@ if __name__ == "__main__":
         print("일일 리포트 처리 실패:", e)
     prune_sent_log(state)
     try:
-        jobs = get_jobs()
+        jobs, transport = get_jobs(state)
+        handle_transport(state, transport)   # 프록시 우회 시작/지속/복구 노티
+        if transport.startswith("proxy:"):
+            state["last_proxy"] = transport.split(":", 1)[1]   # 다음 실행에서 최우선 재사용
         db_file = "processed_incruit_ids.txt"
         processed_ids = open(db_file, "r").read().splitlines() if os.path.exists(db_file) else []
 
