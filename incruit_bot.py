@@ -13,7 +13,8 @@ TG_TOKEN = os.environ.get('TG_TOKEN')
 TG_CHAT_ID = os.environ.get('TG_CHAT_ID')
 # 2026-07 중순 인크루트가 신입관(/entry/)을 React 기반 'Navi'로 개편하면서 구 페이지가
 # 리다이렉트됨 → 동일 필터를 클래식 검색(searchjob.asp)에 적용 (마크업/파라미터 호환 확인됨)
-TARGET_URL = "https://job.incruit.com/jobdb_list/searchjob.asp?jobty=4&jobty=1&group1=7&compty=4&compty=10&scale=2&scale=5&scale=3&group1=17&group1=5&group1=4&group1=1&group1=3&schol=60&occ1=200&occ1=102&rgn2=18&rgn2=14&rgn2=11"
+# crr=1(신입): 구 신입관은 경력직이 자동 배제됐지만 클래식 검색은 경력 필터가 필요함(2026-07-21 추가)
+TARGET_URL = "https://job.incruit.com/jobdb_list/searchjob.asp?jobty=4&jobty=1&group1=7&compty=4&compty=10&scale=2&scale=5&scale=3&group1=17&group1=5&group1=4&group1=1&group1=3&schol=60&occ1=200&occ1=102&rgn2=18&rgn2=14&rgn2=11&crr=1"
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
