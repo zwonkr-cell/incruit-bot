@@ -36,10 +36,18 @@
     {
       "company": "(주)오픈갤러리",
       "at": "2026-07-22 15:11:16"
+    },
+    {
+      "company": "(주)오픈갤러리",
+      "at": "2026-07-22 18:10:51"
+    },
+    {
+      "company": "에코마케팅",
+      "at": "2026-07-22 18:10:54"
     }
   ],
-  "last_activity_at": "2026-07-22 15:11:17",
-  "last_report_date": "2026-07-21",
+  "last_activity_at": "2026-07-22 18:10:55",
+  "last_report_date": "2026-07-22",
   "transport": "direct",
   "consec_err": {}
 }
