@@ -392,10 +392,11 @@ if __name__ == "__main__":
                     "bot": "인크루트",
                     "scraped_at": _now_iso(),
                     "company": job['company'],
+                    "region": job['location'],
                     "title": job['title'],
                     "link": job['link'],
                     "deadline": job['deadline'],
-                    "extra": f"{job['location']}, {job['reg_time']}",   # 남은 속성(지역, 등록시점)
+                    "extra": job['reg_time'],   # 남은 속성(등록시점)
                 })
                 time.sleep(1.2)
 
