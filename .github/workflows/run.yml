@@ -25,6 +25,7 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
         run: python incruit_bot.py
       - name: Update DB
         if: always()   # 오류로 봇이 중단돼도 상태(하트비트/오류 타임스탬프)는 저장

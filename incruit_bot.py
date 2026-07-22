@@ -208,6 +208,18 @@ def send_plain(text):
         except Exception as e:
             print("노티 전송 실패:", cid, e)
 
+# ── 구글 시트 기록(Apps Script 웹앱으로 POST) ──
+SHEET_WEBHOOK_URL = os.environ.get("SHEET_WEBHOOK_URL", "").strip()
+
+def log_to_sheet(payload):
+    """새 공고 1건을 구글 시트에 기록. 실패해도 알림/봇 동작에는 영향 없음."""
+    if not SHEET_WEBHOOK_URL:
+        return
+    try:
+        requests.post(SHEET_WEBHOOK_URL, json=payload, timeout=10)
+    except Exception as e:
+        print("구글시트 기록 실패:", e)
+
 # ── 오류 분류: (키, 이모지, 심각도, 알림까지 필요한 연속횟수, 키워드, 제목, 원인, 조치) ──
 ERROR_CATEGORIES = [
     ("structure", "🔴", "높음 · 조치 필요", 1,
@@ -376,6 +388,15 @@ if __name__ == "__main__":
                 new_id_list.append(job['id'])
                 new_count += 1
                 record_sent(state, job['company'])   # 일일 리포트용 기록
+                log_to_sheet({
+                    "bot": "인크루트",
+                    "scraped_at": _now_iso(),
+                    "company": job['company'],
+                    "title": job['title'],
+                    "link": job['link'],
+                    "deadline": job['deadline'],
+                    "extra": f"{job['location']}, {job['reg_time']}",   # 남은 속성(지역, 등록시점)
+                })
                 time.sleep(1.2)
 
         with open(db_file, "w") as f:
