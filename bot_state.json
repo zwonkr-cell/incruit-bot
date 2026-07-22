@@ -32,9 +32,13 @@
     {
       "company": "대원제약(주)",
       "at": "2026-07-22 12:15:09"
+    },
+    {
+      "company": "(주)오픈갤러리",
+      "at": "2026-07-22 15:11:16"
     }
   ],
-  "last_activity_at": "2026-07-22 12:15:10",
+  "last_activity_at": "2026-07-22 15:11:17",
   "last_report_date": "2026-07-21",
   "transport": "direct",
   "consec_err": {}
