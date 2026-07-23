@@ -389,7 +389,7 @@ if __name__ == "__main__":
                 new_count += 1
                 record_sent(state, job['company'])   # 일일 리포트용 기록
                 log_to_sheet({
-                    "bot": "인크루트",
+                    "bot": "incruit",
                     "scraped_at": _now_iso(),
                     "company": job['company'],
                     "region": job['location'],
