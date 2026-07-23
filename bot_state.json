@@ -44,9 +44,13 @@
     {
       "company": "에코마케팅",
       "at": "2026-07-22 18:10:54"
+    },
+    {
+      "company": "(주)리서치하우스봄",
+      "at": "2026-07-23 10:16:08"
     }
   ],
-  "last_activity_at": "2026-07-23 06:56:42",
+  "last_activity_at": "2026-07-23 10:16:14",
   "last_report_date": "2026-07-22",
   "transport": "direct",
   "consec_err": {}
