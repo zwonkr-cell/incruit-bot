@@ -2,16 +2,12 @@
   "report_initialized": true,
   "sent_log": [
     {
-      "company": "(주)오픈갤러리",
-      "at": "2026-07-23 18:09:39"
-    },
-    {
       "company": "(주)에이션패션",
       "at": "2026-07-24 18:04:26"
     }
   ],
-  "last_activity_at": "2026-07-25 06:55:29",
-  "last_report_date": "2026-07-24",
+  "last_activity_at": "2026-07-25 19:37:42",
+  "last_report_date": "2026-07-25",
   "transport": "direct",
   "consec_err": {}
 }
