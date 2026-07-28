@@ -36,9 +36,13 @@
     {
       "company": "메가스터디교육(주)",
       "at": "2026-07-28 14:52:20"
+    },
+    {
+      "company": "(주)피플렙",
+      "at": "2026-07-28 17:42:40"
     }
   ],
-  "last_activity_at": "2026-07-28 14:52:31",
+  "last_activity_at": "2026-07-28 17:42:46",
   "last_report_date": "2026-07-27",
   "transport": "direct",
   "consec_err": {}
