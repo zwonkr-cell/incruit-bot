@@ -24,9 +24,13 @@
     {
       "company": "(주)리서치하우스봄",
       "at": "2026-07-27 16:38:12"
+    },
+    {
+      "company": "신성통상(주)",
+      "at": "2026-07-28 11:52:41"
     }
   ],
-  "last_activity_at": "2026-07-28 08:55:09",
+  "last_activity_at": "2026-07-28 11:52:45",
   "last_report_date": "2026-07-27",
   "transport": "direct",
   "consec_err": {}
