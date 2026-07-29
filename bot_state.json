@@ -20,9 +20,13 @@
     {
       "company": "한국수자원조사기술원",
       "at": "2026-07-29 18:23:28"
+    },
+    {
+      "company": "동국제약(주)",
+      "at": "2026-07-29 20:40:55"
     }
   ],
-  "last_activity_at": "2026-07-29 18:23:31",
+  "last_activity_at": "2026-07-29 20:41:00",
   "last_report_date": "2026-07-29",
   "transport": "direct",
   "consec_err": {}
