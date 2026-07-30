@@ -2,10 +2,6 @@
   "report_initialized": true,
   "sent_log": [
     {
-      "company": "(주)피플렙",
-      "at": "2026-07-28 17:42:40"
-    },
-    {
       "company": "한국수자원조사기술원",
       "at": "2026-07-29 18:23:28"
     },
@@ -18,8 +14,8 @@
       "at": "2026-07-30 17:35:20"
     }
   ],
-  "last_activity_at": "2026-07-30 17:35:24",
-  "last_report_date": "2026-07-29",
+  "last_activity_at": "2026-07-30 20:11:34",
+  "last_report_date": "2026-07-30",
   "transport": "direct",
   "consec_err": {}
 }
