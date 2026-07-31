@@ -12,9 +12,13 @@
     {
       "company": "주식회사 시너지버슨",
       "at": "2026-07-30 17:35:20"
+    },
+    {
+      "company": "에코마케팅",
+      "at": "2026-07-31 12:27:08"
     }
   ],
-  "last_activity_at": "2026-07-31 10:00:14",
+  "last_activity_at": "2026-07-31 12:27:11",
   "last_report_date": "2026-07-30",
   "transport": "direct",
   "consec_err": {}
