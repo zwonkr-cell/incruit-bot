@@ -2,10 +2,6 @@
   "report_initialized": true,
   "sent_log": [
     {
-      "company": "한국수자원조사기술원",
-      "at": "2026-07-29 18:23:28"
-    },
-    {
       "company": "동국제약(주)",
       "at": "2026-07-29 20:40:55"
     },
@@ -18,8 +14,8 @@
       "at": "2026-07-31 12:27:08"
     }
   ],
-  "last_activity_at": "2026-07-31 12:27:11",
-  "last_report_date": "2026-07-30",
+  "last_activity_at": "2026-07-31 18:49:05",
+  "last_report_date": "2026-07-31",
   "transport": "direct",
   "consec_err": {}
 }
