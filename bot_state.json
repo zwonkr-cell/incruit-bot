@@ -1,11 +1,6 @@
 {
   "report_initialized": true,
-  "sent_log": [
-    {
-      "company": "에코마케팅",
-      "at": "2026-07-31 12:27:08"
-    }
-  ],
+  "sent_log": [],
   "last_activity_at": "2026-08-02 07:43:44",
   "last_report_date": "2026-08-01",
   "transport": "direct",
