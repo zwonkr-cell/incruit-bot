@@ -1,8 +1,13 @@
 {
   "report_initialized": true,
-  "sent_log": [],
-  "last_activity_at": "2026-08-04 07:57:36",
-  "last_report_date": "2026-08-03",
+  "sent_log": [
+    {
+      "company": "퍼플엘리펀트(주)(Purple Elephant)",
+      "at": "2026-08-04 20:28:48"
+    }
+  ],
+  "last_activity_at": "2026-08-04 20:29:01",
+  "last_report_date": "2026-08-04",
   "transport": "direct",
   "consec_err": {}
 }
