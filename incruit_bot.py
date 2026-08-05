@@ -130,22 +130,11 @@ def get_jobs(state=None):
     raise RuntimeError("인크루트 접속 실패(직접+프록시 모두) - 사이트 접근 불가")
 
 def handle_transport(state, transport):
-    """프록시 우회 여부 변화를 감지해 노티. 우회 지속 중엔 12시간마다 1회 리마인드."""
+    """연결 방식(직접/프록시) 변화를 기록만 한다.
+    프록시 우회는 정상 동작의 일부 - 텔레그램 알림 없음(2026-07 사용자 요청: 프록시 알림 전면 중단)."""
     prev = str(state.get("transport", "direct"))
-    now_p = transport.startswith("proxy")
-    prev_p = prev.startswith("proxy")
-    if now_p and not prev_p:
-        send_plain(f"🛡 [{BOT_NAME}] 직접 접속이 막혀서 한국 프록시로 즉시 우회했어요.\n"
-                   f"수집·알림은 정상 작동 중이고, 조치는 필요 없어요.\n"
-                   f"(우회가 계속되면 12시간마다 한 번씩만 알려드릴게요)")
-        state["proxy_notice_at"] = _now_iso()
-    elif now_p and prev_p:
-        last = _parse_iso(state.get("proxy_notice_at"))
-        if not last or (datetime.now(KST) - last) >= timedelta(hours=12):
-            send_plain(f"🛡 [{BOT_NAME}] 여전히 프록시 우회로 수집 중이에요(정상 작동, 조치 불필요).")
-            state["proxy_notice_at"] = _now_iso()
-    elif (not now_p) and prev_p:
-        send_plain(f"✅ [{BOT_NAME}] 직접 접속이 복구되어 프록시 우회를 종료했어요.")
+    if prev != transport:
+        print(f"연결 방식 변경: {prev} -> {transport} (알림 없음)")
     state["transport"] = transport
 
 def send_telegram(msg):
@@ -263,6 +252,10 @@ def notify_error(state, raw_text):
     consec = state.setdefault("consec_err", {})
     cnt = consec.get(info["key"], 0) + 1
     consec[info["key"]] = cnt
+    # 크리티컬(구조 변경, 미분류)만 전송. 나머지는 로그만 - 하트비트가 장기 장애를 잡아줌(2026-07 사용자 요청).
+    if info["key"] not in ("structure", "unknown"):
+        print(f"[{info['key']}] 비크리티컬 오류 -> 텔레그램 생략(로그만): {summary}")
+        return
     if cnt < info["min_consec"]:
         print(f"[{info['key']}] 1회성 오류 → 알림 보류(연속 {info['min_consec']}회부터 알림)")
         return
