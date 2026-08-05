@@ -157,7 +157,7 @@ def send_telegram(msg):
 # ─────────────────────────────────────────────────────────────
 KST = timezone(timedelta(hours=9))
 STATE_FILE = "bot_state.json"
-HEARTBEAT_HOURS = 12       # 이 시간 동안 새 공고가 없으면 '신규 없음' 노티
+HEARTBEAT_HOURS = 24       # 이 시간 동안 새 공고가 없으면 '신규 없음' 노티
 ERROR_DEDUP_HOURS = 12     # 같은 유형 오류는 이 시간에 한 번만 노티(스팸 방지)
 BOT_NAME = "인크루트봇"
 
@@ -293,66 +293,16 @@ def maybe_heartbeat(state, collected, new_count):
                    f"수집완료 {collected}건, 신규후보 {new_count}건\n(확인 시각: {_now_iso()})")
         state["last_activity_at"] = _now_iso()
 
-# ── 일일 리포트: 매일 18시(KST) 이후 첫 실행 시 전일18~당일18 신규 공고 요약 ──
-REPORT_HOUR = 18
-SENT_LOG_KEEP_HOURS = 48
-
-def record_sent(state, company):
-    state.setdefault("sent_log", []).append({"company": (company or "(기업명 없음)"), "at": _now_iso()})
-
-def prune_sent_log(state, keep_hours=SENT_LOG_KEEP_HOURS):
-    now = datetime.now(KST)
-    kept = []
-    for e in state.get("sent_log", []):
-        t = _parse_iso(e.get("at"))
-        if t and (now - t) <= timedelta(hours=keep_hours):
-            kept.append(e)
-    state["sent_log"] = kept
-
-def maybe_daily_report(state, now=None):
-    now = now or datetime.now(KST)
-    today_1800 = now.replace(hour=REPORT_HOUR, minute=0, second=0, microsecond=0)
-    today_str = now.strftime("%Y-%m-%d")
-    # 최초 실행: 이미 18시 지났으면 오늘 리포트는 데이터 없어 건너뜀(다음날부터)
-    if not state.get("report_initialized"):
-        state["report_initialized"] = True
-        if now >= today_1800:
-            state["last_report_date"] = today_str
-        return
-    if now < today_1800 or state.get("last_report_date") == today_str:
-        return
-    win_start = today_1800 - timedelta(days=1)
-    companies = []
-    n = 0
-    for e in state.get("sent_log", []):
-        t = _parse_iso(e.get("at"))
-        if t and win_start <= t < today_1800:
-            n += 1
-            c = e.get("company") or "(기업명 없음)"
-            if c not in companies:
-                companies.append(c)
-    header = (f"📊 [{BOT_NAME}] 일일 리포트\n"
-              f"({win_start.strftime('%m/%d %H:%M')} ~ {today_1800.strftime('%m/%d %H:%M')})")
-    if n:
-        body = (f"\n신규 공고 {n}건 · 기업 {len(companies)}곳\n\n"
-                + "\n".join(f"• {c}" for c in companies))
-    else:
-        body = "\n이 기간에 새로 올라온 공고가 없었어요."
-    send_plain(header + body)
-    state["last_report_date"] = today_str
-    state["last_activity_at"] = _now_iso()   # 리포트도 활동 → 하트비트 리셋
+# (일일 리포트 기능은 2026-08-05 사용자 요청으로 삭제 — 하트비트만 유지)
 
 if __name__ == "__main__":
     state = load_state()
-    # 일일 리포트(매일 18시 이후 첫 실행) — 수집 실패와 무관하게 먼저 처리
-    try:
-        maybe_daily_report(state)
-    except Exception as e:
-        print("일일 리포트 처리 실패:", e)
-    prune_sent_log(state)
+    # 일일 리포트 폐지에 따른 상태키 정리(1회성, 없으면 no-op)
+    for _k in ("sent_log", "report_initialized", "last_report_date"):
+        state.pop(_k, None)
     try:
         jobs, transport = get_jobs(state)
-        handle_transport(state, transport)   # 프록시 우회 시작/지속/복구 노티
+        handle_transport(state, transport)   # 연결 방식 기록(알림 없음)
         if transport.startswith("proxy:"):
             state["last_proxy"] = transport.split(":", 1)[1]   # 다음 실행에서 최우선 재사용
         db_file = "processed_incruit_ids.txt"
@@ -380,7 +330,6 @@ if __name__ == "__main__":
                 send_telegram(message)
                 new_id_list.append(job['id'])
                 new_count += 1
-                record_sent(state, job['company'])   # 일일 리포트용 기록
                 log_to_sheet({
                     "bot": "incruit",
                     "scraped_at": _now_iso(),
