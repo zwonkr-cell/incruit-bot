@@ -1,8 +1,6 @@
 {
-  "last_activity_at": "2026-09-30 13:57:43",
+  "last_activity_at": "2026-10-01 01:58:42",
   "transport": "proxy:103.51.205.108:8090",
-  "consec_err": {
-    "network": 1
-  },
+  "consec_err": {},
   "last_proxy": "103.51.205.108:8090"
 }
