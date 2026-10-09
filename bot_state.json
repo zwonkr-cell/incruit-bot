@@ -2,7 +2,7 @@
   "last_activity_at": "2026-10-08 21:14:14",
   "transport": "proxy:221.141.140.132:8118",
   "consec_err": {
-    "network": 1
+    "network": 2
   },
   "last_proxy": "221.141.140.132:8118"
 }
