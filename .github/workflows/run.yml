@@ -18,9 +18,9 @@ on:
         type: choice
         options: [run, dry-run, dry-run-proxy]
 
-# 실행이 겹치지 않게 직렬화(중복 알림·상태 push 충돌 방지). 대기 중인 실행은 가장 최근 1건만 남습니다.
+# 실행이 겹치지 않게 브랜치별로 직렬화(중복 알림·상태 push 충돌 방지). 대기 중인 실행은 가장 최근 1건만 남습니다.
 concurrency:
-  group: incruit-bot
+  group: incruit-bot-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -31,6 +31,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # 실행이 만들어진 시점이 아니라 '지금' 브랜치 최신 커밋을 받음 → 앞 실행이 저장한 처리 기록을 이어받아
+          # 대기했다가 시작한 실행이 방금 보낸 공고를 다시 보내지 않음
+          ref: ${{ github.ref }}
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -45,7 +49,8 @@ jobs:
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
           DRY_RUN: ${{ startsWith(github.event.inputs.mode, 'dry-run') && '1' || '' }}
           NETKIT_FORCE_PROXY: ${{ github.event.inputs.mode == 'dry-run-proxy' && '1' || '' }}
-        run: python incruit_bot.py
+        # exec: 시간 초과로 취소될 때 러너의 중단 신호가 파이썬에 바로 전달돼 기록 저장(finally)이 실행됨
+        run: exec python incruit_bot.py
       - name: Update DB
         # 오류로 봇이 중단돼도 상태(하트비트/오류 타임스탬프)는 저장. 미리보기(dry-run)는 저장 안 함
         if: always() && !startsWith(github.event.inputs.mode, 'dry-run')
@@ -57,6 +62,6 @@ jobs:
           for i in 1 2 3; do
             git push && exit 0
             echo "push 실패 → 최신 커밋을 받아 다시 시도 ($i/3)"
-            git pull --rebase -X theirs origin "$GITHUB_REF_NAME" || { git rebase --abort; sleep 3; }
+            git pull --rebase -X theirs origin "$GITHUB_REF_NAME" || { git rebase --abort 2>/dev/null || true; sleep 3; }
           done
-          exit 1
+          git push

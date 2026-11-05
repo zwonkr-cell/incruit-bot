@@ -178,13 +178,16 @@ def collect_jobs(net, state, processed):
 
 def handle_transport(state, transport):
     """연결 방식(직접/프록시) 변화를 기록만 한다.
-    프록시 우회는 정상 동작의 일부 - 텔레그램 알림 없음(2026-07 사용자 요청: 프록시 알림 전면 중단)."""
+    프록시 우회는 정상 동작의 일부 - 텔레그램 알림 없음(2026-07 사용자 요청: 프록시 알림 전면 중단).
+    state 에는 종류('direct'/'proxy')만 저장한다. 어느 프록시였는지는 [net] 로그에 남고,
+    바뀌는 주소까지 저장하면 실행마다 bot_state.json 이 달라져 불필요한 커밋이 쌓인다."""
     if not transport:
         return
-    prev = str(state.get("transport", "direct"))
-    if prev != transport:
-        print(f"연결 방식 변경: {prev} -> {transport} (알림 없음)")
-    state["transport"] = transport
+    kind = "direct" if transport == "direct" else "proxy"
+    prev = "direct" if str(state.get("transport", "direct")) == "direct" else "proxy"
+    if prev != kind:
+        print(f"연결 방식 변경: {prev} -> {kind} (알림 없음)")
+    state["transport"] = kind
 
 
 # ─────────────────────────────────────────────────────────────
@@ -293,6 +296,10 @@ STATE_FILE = "bot_state.json"
 HEARTBEAT_HOURS = 24       # 이 시간 동안 새 공고가 없으면 '신규 없음' 노티
 ERROR_DEDUP_HOURS = 12     # 같은 유형 오류는 이 시간에 한 번만 노티(스팸 방지)
 BOT_NAME = "인크루트봇"
+# 전송 시간 상한: 워크플로 timeout-minutes(10분) 안에 기록 저장·커밋까지 끝내도록,
+# 실행 시작 후 이 시간이 지나면 새 전송을 시작하지 않고 남은 공고는 다음 실행으로 넘긴다.
+SEND_BUDGET_SEC = 360
+MAX_SEND_FAILS = 2         # 연속으로 이만큼 전송 실패(텔레그램 장애 의심) → 남은 공고는 다음 실행에서
 
 
 def _now_iso():
@@ -418,13 +425,14 @@ def notify_error(state, raw_text):
     raw_text = (raw_text or "").strip() or "알 수 없는 오류"
     summary = raw_text.splitlines()[-1][:100]
     info = classify_error(raw_text)
-    consec = state.setdefault("consec_err", {})
-    cnt = consec.get(info["key"], 0) + 1
-    consec[info["key"]] = cnt
     # 크리티컬(구조 변경, 미분류)만 전송. 나머지는 로그만 - 하트비트가 장기 장애를 잡아줌(2026-07 사용자 요청).
+    # (로그만 남기는 오류는 state 도 건드리지 않음 → 장애 중 실행마다 bot_state.json 이 바뀌어 커밋이 쌓이지 않게)
     if info["key"] not in ("structure", "unknown"):
         print(f"[{info['key']}] 비크리티컬 오류 -> 텔레그램 생략(로그만): {summary}")
         return
+    consec = state.setdefault("consec_err", {})
+    cnt = consec.get(info["key"], 0) + 1
+    consec[info["key"]] = cnt
     if cnt < info["min_consec"]:
         print(f"[{info['key']}] 1회성 오류 → 알림 보류(연속 {info['min_consec']}회부터 알림)")
         return
@@ -486,16 +494,26 @@ def main():
         handle_transport(state, net.label)   # 연결 방식 기록(알림 없음)
 
         new_jobs = [j for j in jobs if j['id'] not in processed_set]
-        sent = failed = 0
-        for job in reversed(new_jobs):        # 오래된 것부터 전송
+        sent = failed = fail_streak = 0
+        todo = list(reversed(new_jobs))       # 오래된 것부터 전송
+        for idx, job in enumerate(todo):
             message = build_message(job)
             if DRY_RUN:
                 print("[DRY-RUN] 전송 예정 ─────────────\n" + message)
                 continue
+            if time.monotonic() - t_start > SEND_BUDGET_SEC:
+                print(f"실행 {SEND_BUDGET_SEC}초 초과 → 남은 {len(todo) - idx}건은 다음 실행에서 전송")
+                break
+            if fail_streak >= MAX_SEND_FAILS:
+                print(f"전송 연속 {fail_streak}회 실패(텔레그램 장애 의심) → 남은 {len(todo) - idx}건은 다음 실행에서 전송")
+                break
             if send_telegram(message):
                 processed.insert(0, job['id'])
                 processed_set.add(job['id'])
+                # 보내자마자 기록: 실행이 도중에 끊겨도(시간 초과 등) 이미 보낸 공고를 다시 보내지 않음
+                save_processed(processed, original)
                 sent += 1
+                fail_streak = 0
                 sheet_rows.append({
                     "bot": "incruit",
                     "scraped_at": _now_iso(),
@@ -508,10 +526,13 @@ def main():
                 })
             else:
                 failed += 1
+                fail_streak += 1
                 print(f"전송 실패(일시적) → 다음 실행에서 재시도: {job['id']}")
             time.sleep(1.0)
+        later = 0 if DRY_RUN else len(new_jobs) - sent - failed
         print(f"완료: 수집완료 {len(jobs)}건, 신규후보 {len(new_jobs)}건 중 {sent}건 전송"
-              + (f", {failed}건 재시도 예정" if failed else ""))
+              + (f", {failed}건 재시도 예정" if failed else "")
+              + (f", {later}건 다음 실행으로" if later else ""))
 
         state["consec_err"] = {}   # 성공 → 연속 오류 카운터 리셋
         if rows and bad * 2 >= rows:   # 절반 이상 못 읽음 → 부분적인 구조 변경 의심
@@ -529,6 +550,10 @@ def main():
         tb = traceback.format_exc()
         print(tb)
         notify_error(state, tb)   # 분류된 쉬운 설명으로 노티(원문은 로그에만)
+        if not DRY_RUN:
+            # 접속 장애처럼 '로그만 남기는' 오류가 며칠 이어져도 무소식이 되지 않도록,
+            # 실패한 실행에서도 24시간 하트비트(기존 '신규 없음' 노티)를 확인한다.
+            maybe_heartbeat(state, 0, 0)
     finally:
         net.finalize()
         print(net.summary())
