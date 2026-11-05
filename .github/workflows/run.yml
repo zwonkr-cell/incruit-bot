@@ -1,16 +1,32 @@
 name: Incruit Alert Bot
 
 on:
+  # ── 주 트리거: 외부 스케줄러(구글 Apps Script 또는 cron-job.org)가 workflow_dispatch 로 10분마다 호출
+  #    GitHub 의 schedule 은 혼잡하면 크게 지연·누락됩니다(실측 2026-10-22~11-04: 하루 예약 35회 중 약 6회만
+  #    실행, 주간 실행 간격 중앙값 약 5시간). 설정 방법: catch-alert 리포의 TRIGGER_SETUP.md
+  # ── 아래 schedule 은 외부 트리거가 멈췄을 때의 '안전망'. 혼잡한 정각·30분을 피해 7분·37분에 예약
   schedule:
-    # 주간(KST 06:00~20:59): 30분 간격 / 야간(KST 21:00~05:00): 2시간 간격
-    - cron: '*/30 21-23 * * *'   # UTC 21~23시 = KST 06:00~08:59
-    - cron: '*/30 0-11 * * *'    # UTC 00~11시 = KST 09:00~20:59
-    - cron: '0 12-20/2 * * *'    # UTC 12,14,16,18,20시 = KST 21,23,01,03,05시
-  workflow_dispatch: # 수동 실행 버튼
+    - cron: '7,37 21-23 * * *'   # UTC 21~23시 = KST 06:07~08:37
+    - cron: '7,37 0-11 * * *'    # UTC 00~11시 = KST 09:07~20:37
+    - cron: '17 12-20/2 * * *'   # UTC 12,14,16,18,20시 = KST 21:17, 23:17, 01:17, 03:17, 05:17
+  workflow_dispatch: # 수동 실행 버튼 + 외부 트리거
+    inputs:
+      mode:
+        description: "실행 모드 (run=정상, dry-run=전송·저장 없이 미리보기, dry-run-proxy=프록시 경로만 점검)"
+        required: false
+        default: run
+        type: choice
+        options: [run, dry-run, dry-run-proxy]
+
+# 실행이 겹치지 않게 직렬화(중복 알림·상태 push 충돌 방지). 대기 중인 실행은 가장 최근 1건만 남습니다.
+concurrency:
+  group: incruit-bot
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10   # 멈춘 실행이 다음 실행을 막지 않도록(기본값은 6시간)
     permissions:
       contents: write
     steps:
@@ -19,6 +35,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run Bot
@@ -26,12 +43,20 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          DRY_RUN: ${{ startsWith(github.event.inputs.mode, 'dry-run') && '1' || '' }}
+          NETKIT_FORCE_PROXY: ${{ github.event.inputs.mode == 'dry-run-proxy' && '1' || '' }}
         run: python incruit_bot.py
       - name: Update DB
-        if: always()   # 오류로 봇이 중단돼도 상태(하트비트/오류 타임스탬프)는 저장
+        # 오류로 봇이 중단돼도 상태(하트비트/오류 타임스탬프)는 저장. 미리보기(dry-run)는 저장 안 함
+        if: always() && !startsWith(github.event.inputs.mode, 'dry-run')
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git add processed_incruit_ids.txt bot_state.json
           git commit -m "Update state" || exit 0
-          git push
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "push 실패 → 최신 커밋을 받아 다시 시도 ($i/3)"
+            git pull --rebase -X theirs origin "$GITHUB_REF_NAME" || { git rebase --abort; sleep 3; }
+          done
+          exit 1
